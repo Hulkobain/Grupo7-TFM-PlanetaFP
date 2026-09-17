@@ -1,0 +1,21 @@
+# Entornos virtuales y configuración local
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Cachés y artefactos generados
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
+# Datos y archivos temporales locales
+*.log
+.DS_Store
+.vscode/
