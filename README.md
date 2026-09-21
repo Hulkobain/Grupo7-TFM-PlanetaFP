@@ -1,37 +1,34 @@
-# Grupo 7 - PlanetaFP
+# Smart Supply Chain Risk AI
+
+Torre de Control Inteligente de Logística y Cadena de Suministro B2B.
 
 ## Objetivo
 
-Desarrollar el Trabajo de Fin de Máster del Grupo 7 para analizar, diseñar y documentar la propuesta **PlanetaFP**.
+Desarrollar un sistema que prediga el riesgo de retraso de un envío desde la creación del pedido. La solución ayudará a los ERP/WMS y a los gestores de tráfico a actuar antes del despacho mediante una API y un dashboard.
 
 ## Miembros
 
-- Pendiente de completar con los nombres de los integrantes del grupo.
+- Adrián Matemalas Manzanaro
+- Raúl Romero Montoro
+- Raúl Rincón Ortiz
 
 ## Organización del repositorio
 
-El repositorio se organizará separando la documentación, el código fuente, los datos y la configuración del entorno. Cada cambio deberá incluir la documentación o las pruebas necesarias para facilitar el trabajo colaborativo.
+- `docs/`: entregables y documentación.
+- `data/`: datos de apoyo del proyecto.
+- `environment/`: configuración para reproducir el entorno.
+- `src/`: código de datos, modelo, API y dashboard.
 
-## Estructura de carpetas
+El equipo trabaja con GitFlow: las tareas se desarrollan en ramas `feature/<tarea>`, se revisan mediante PR hacia `develop` y las entregas se integran en `main` con su correspondiente *tag*.
+
+## Estructura
 
 ```text
-repo/
-├── docs/
-│   └── NF1_Presentacion_y_Viabilidad.pdf
-├── src/
+Grupo7-TFM-PlanetaFP/
 ├── data/
-│   └── .gitkeep
+├── docs/
 ├── environment/
+├── src/
 ├── README.md
 └── .gitignore
 ```
-
-- `docs/`: documentación del proyecto y entregables, incluida la presentación inicial y el estudio de viabilidad.
-- `src/`: código fuente de la solución.
-- `data/`: datos de entrada, salida o apoyo. Actualmente no contiene datos y se conserva mediante `.gitkeep`.
-- `environment/`: archivos y notas necesarios para reproducir el entorno de desarrollo.
-
-## Estado inicial
-
-- La presentación `docs/NF1_Presentacion_y_Viabilidad.pdf` queda reservada para incorporar el documento de la primera fase.
-- Los nombres de los miembros y los detalles del entorno se completarán durante la planificación del proyecto.
