@@ -21,6 +21,10 @@ Desarrollar un sistema que prediga el riesgo de retraso de un envío desde la cr
 
 El equipo trabaja con GitFlow: las tareas se desarrollan en ramas `feature/<tarea>`, se revisan mediante PR hacia `develop` y las entregas se integran en `main` con su correspondiente *tag*.
 
+## Arquitectura resumida
+
+![Arquitectura](docs/arquitectura.png)
+
 ## Estructura
 
 ```text
