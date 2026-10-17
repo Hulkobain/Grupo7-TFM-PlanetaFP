@@ -136,6 +136,10 @@ de iniciar el panel. Los puertos del host se pueden cambiar con las variables
 `API_PORT` y `DASHBOARD_PORT`.
 
 El Dockerfile define objetivos de construcción independientes (`api` y
-`dashboard`) sobre `python:3.10-slim`. El dashboard actual es un punto de
-integración mínimo para TASK-09; la interfaz funcional se completará con el
-equipo de Frontend/BI.
+`dashboard`) sobre `python:3.10-slim`. El dashboard actual es la base de la Torre de Control: comprueba la salud de
+la API y reserva las vistas de indicadores operativos, riesgo regional y envíos
+recientes. Muestra estados vacíos explícitos en lugar de inventar predicciones.
+La API actual solo valida la ingesta y `/predict` devuelve `503` mientras no
+haya modelo; todavía no ofrece un histórico, agregados ni coordenadas para
+alimentar esas vistas. El mapa y los indicadores se conectarán cuando estén
+disponibles los datos y contratos correspondientes.
