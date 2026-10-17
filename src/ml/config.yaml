@@ -1,0 +1,31 @@
+seed: 42
+
+data:
+  # Fichero limpio a nivel de pedido (feature columns + target_column),
+  # generado por el pipeline de datos.
+  cleaned_path: data/cleaned/orders.parquet
+  target_column: Late_delivery_risk
+
+model:
+  objective: binary:logistic
+  eval_metric: auc
+  threshold: 0.5
+  hyperparams:
+    n_estimators: 500
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1
+    reg_lambda: 1.0
+    early_stopping_rounds: 50
+
+validation:
+  test_size: 0.2
+  stratify: true
+  random_state: 42
+
+output:
+  model_dir: src/ml/artifacts
+  model_file: delay_risk_xgb.json
+  metadata_file: model_metadata.json

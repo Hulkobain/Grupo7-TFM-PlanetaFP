@@ -15,7 +15,7 @@ Desarrollar un sistema que prediga el riesgo de retraso de un envío desde la cr
 ## Organización del repositorio
 
 - `docs/`: entregables y documentación.
-- `data/`: datos de apoyo del proyecto.
+- `data/`: datos del proyecto, separados en `raw/` (crudos) y `cleaned/` (limpios, generados); ambos directorios se ignoran por git.
 - `environment/`: configuración para reproducir el entorno.
 - `src/`: código de datos, modelo, API y dashboard.
 
@@ -30,6 +30,8 @@ El equipo trabaja con GitFlow: las tareas se desarrollan en ramas `feature/<tare
 ```text
 Grupo7-TFM-PlanetaFP/
 ├── data/
+│   ├── raw/        # datos crudos, p. ej. DataCoSupplyChainDataset.csv (gitignored)
+│   └── cleaned/    # datos limpios generados por el pipeline (gitignored)
 ├── docs/
 ├── environment/
 ├── src/
@@ -37,13 +39,24 @@ Grupo7-TFM-PlanetaFP/
 │   │   ├── main.py
 │   │   ├── schemas.py
 │   │   └── webhooks.py
-│   └── dashboard/
-│       └── app.py
+│   ├── dashboard/
+│   │   └── app.py
+│   └── ml/
+│       ├── config.yaml
+│       ├── config.py
+│       ├── model.py
+│       ├── evaluate.py
+│       ├── pipeline.py
+│       └── train.py
 ├── tests/
+├── environment/
+│   ├── requirements.txt
+│   ├── requirements-api.txt
+│   ├── requirements-dashboard.txt
+│   └── requirements-ml.txt
 ├── Dockerfile
 ├── docker-compose.yml
-├── README.md
-└── .gitignore
+└── README.md
 ```
 
 ## API de ingesta y predicción
@@ -139,3 +152,54 @@ El Dockerfile define objetivos de construcción independientes (`api` y
 `dashboard`) sobre `python:3.10-slim`. El dashboard actual es un punto de
 integración mínimo para TASK-09; la interfaz funcional se completará con el
 equipo de Frontend/BI.
+
+## Entrenamiento del modelo (XGBoost)
+
+El código de entrenamiento vive en `src/ml`, separado de la API y del panel
+porque tiene su propio conjunto de dependencias (`environment/requirements-ml.txt`)
+y un ciclo de vida distinto (entrenamiento *offline* por lotes, no desplegable).
+Se mantiene bajo `src/` para respetar la convención de paquetes `src.<módulo>`
+(`src.api`, `src.dashboard`, `src.ml`). Los objetivos de construcción del
+Dockerfile (`api`, `dashboard`) solo copian su subdirectorio, así que las
+dependencias de ML nunca entran en las imágenes desplegables.
+
+`src/ml` es **solo entrenamiento**: carga un fichero limpio a nivel de pedido,
+entrena y guarda el artefacto. La carga, limpieza y agregación del CSV crudo
+(`loader`, `target`, `features`) es responsabilidad del pipeline de datos.
+
+**Contrato de entrada:** un fichero Parquet a nivel de pedido con una columna
+por feature y la columna `Late_delivery_risk` (0/1). Su ruta se define en
+`config.yaml` (`data.cleaned_path`, por defecto `data/cleaned/orders.parquet`).
+
+Los datos se organizan en `data/raw/` (ficheros fuente, como el CSV de Kaggle)
+y `data/cleaned/` (salida del pipeline de datos, regenerable). Ambos directorios
+están ignorados por git y solo se conservan sus `.gitkeep`.
+
+Objetivo: predecir la probabilidad de retraso de un envío. `XGBClassifier` con
+`objective: binary:logistic` produce `P(retraso) ∈ [0,1]`. El porcentaje de
+riesgo es `100 × P`, que es lo que `/predict` expondrá como `delay_probability`
+(`delay_risk` se deriva con el umbral `model.threshold`, por defecto 0.5).
+
+Estructura:
+
+```text
+src/ml/
+├── config.yaml     # cleaned_path, hiperparámetros, split, umbral, rutas
+├── config.py       # carga de config.yaml
+├── model.py        # XGBClassifier: build/train/save + metadata
+├── evaluate.py     # métricas y conversión probabilidad → porcentaje
+├── pipeline.py     # load limpio → split → train → evaluate → save
+└── train.py        # punto de entrada CLI
+```
+
+Para entrenar (requiere el fichero limpio en `data/cleaned/orders.parquet`):
+
+```bash
+pip install -r environment/requirements-ml.txt
+python -m src.ml.train
+```
+
+El artefacto se guarda en `src/ml/artifacts/` (ignorado por git): el modelo
+(`delay_risk_xgb.json`) y `model_metadata.json` con features, métricas, umbral y
+parámetros. Cuando se integre el modelo en `/predict`, se carga desde ese
+directorio.
