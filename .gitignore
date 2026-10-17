@@ -17,5 +17,6 @@ dist/
 
 # Datos y archivos temporales locales
 *.log
+/data/DataCoSupplyChainDataset.csv*
 .DS_Store
 .vscode/
