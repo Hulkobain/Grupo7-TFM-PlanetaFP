@@ -16,6 +16,7 @@ def build_model(config: dict) -> tuple[xgb.XGBClassifier, int | None]:
         eval_metric=config["model"]["eval_metric"],
         random_state=config["seed"],
         n_jobs=-1,
+        early_stopping_rounds=early,
         **hp,
     )
     return model, early
@@ -32,7 +33,6 @@ def train(
     kwargs = {}
     if early_rounds:
         kwargs["eval_set"] = [(X_val, y_val)]
-        kwargs["early_stopping_rounds"] = early_rounds
     model.fit(X_train, y_train, **kwargs)
     return model
 
@@ -49,7 +49,7 @@ def save_artifact(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = out_dir / config["output"]["model_file"]
-    model.save_model(str(model_path))
+    model.get_booster().save_model(str(model_path))
 
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),

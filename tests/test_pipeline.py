@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import xgboost as xgb
 
 from src.ml.pipeline import run
 
@@ -20,3 +21,6 @@ def test_run_pipeline_on_cleaned_csv(tmp_path) -> None:
     assert 0.0 <= metrics["roc_auc"] <= 1.0
     assert (out / "delay_risk_xgb.json").exists()
     assert (out / "model_metadata.json").exists()
+    restored = xgb.XGBClassifier()
+    restored.load_model(str(out / "delay_risk_xgb.json"))
+    assert restored.predict_proba([[1, 10.0]]).shape == (1, 2)

@@ -41,6 +41,8 @@ Grupo7-TFM-PlanetaFP/
 │   │   └── webhooks.py
 │   ├── dashboard/
 │   │   └── app.py
+│   ├── data/
+│   │   └── clean.py
 │   └── ml/
 │       ├── config.yaml
 │       ├── config.py
@@ -167,9 +169,8 @@ Se mantiene bajo `src/` para respetar la convención de paquetes `src.<módulo>`
 Dockerfile (`api`, `dashboard`) solo copian su subdirectorio, así que las
 dependencias de ML nunca entran en las imágenes desplegables.
 
-`src/ml` es **solo entrenamiento**: carga un fichero limpio a nivel de pedido,
-entrena y guarda el artefacto. La carga, limpieza y agregación del CSV crudo
-(`loader`, `target`, `features`) es responsabilidad del pipeline de datos.
+`src/data` limpia y agrega el CSV de DataCo a nivel de pedido. `src/ml` carga el
+fichero resultante, entrena y guarda el artefacto.
 
 **Contrato de entrada:** un fichero Parquet a nivel de pedido con una columna
 por feature y la columna `Late_delivery_risk` (0/1). Su ruta se define en
@@ -184,6 +185,28 @@ Objetivo: predecir la probabilidad de retraso de un envío. `XGBClassifier` con
 riesgo es `100 × P`, que es lo que `/predict` expondrá como `delay_probability`
 (`delay_risk` se deriva con el umbral `model.threshold`, por defecto 0.5).
 
+### Preparación de DataCo
+
+El fichero de entrenamiento es `data/raw/DataCoSupplyChainDataset.csv`.
+`DescriptionDataCoSupplyChain.csv` sirve como diccionario de datos y
+`tokenized_access_logs.csv` es una fuente distinta, no utilizada para predecir
+retrasos de pedidos. Instala `environment/requirements-ml.txt` y ejecuta desde
+la raíz:
+
+```powershell
+python -m src.ml.train --raw-data data/raw/DataCoSupplyChainDataset.csv
+```
+
+Esto genera el Parquet configurado y entrena el modelo. Para regenerar solo el
+Parquet, ejecuta `python -m src.data.clean`; acepta `--input` y `--output`.
+
+La limpieza valida la etiqueta y los atributos compartidos por pedido, agrega
+las líneas a una fila por `Order Id` y guarda el Parquet definido en
+`src/ml/config.yaml`. Solo conserva señales disponibles al crear el pedido:
+fecha derivada, modo de envío, segmento, mercado, región y agregados de sus
+artículos. Excluye identificadores, datos personales y variables posteriores
+al envío. Se puede cambiar la entrada o salida con `--input` y `--output`.
+
 Estructura:
 
 ```text
@@ -196,7 +219,7 @@ src/ml/
 └── train.py        # punto de entrada CLI
 ```
 
-Para entrenar (requiere el fichero limpio en `data/cleaned/orders.parquet`):
+Para entrenar directamente desde un fichero ya limpio:
 
 ```bash
 pip install -r environment/requirements-ml.txt
