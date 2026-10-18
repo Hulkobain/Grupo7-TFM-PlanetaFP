@@ -17,6 +17,13 @@ dist/
 
 # Datos y archivos temporales locales
 *.log
-/data/DataCoSupplyChainDataset.csv*
+/data/raw/*
+!/data/raw/.gitkeep
+/data/cleaned/*
+!/data/cleaned/.gitkeep
 .DS_Store
 .vscode/
+AGENTS.md
+
+# Artefactos del modelo de ML
+src/ml/artifacts/
