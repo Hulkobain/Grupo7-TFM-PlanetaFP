@@ -173,7 +173,8 @@ dependencias de ML nunca entran en las imágenes desplegables.
 fichero resultante, entrena y guarda el artefacto.
 
 **Contrato de entrada:** un fichero Parquet a nivel de pedido con una columna
-por feature y la columna `Late_delivery_risk` (0/1). Su ruta se define en
+por feature (incluido `order_timestamp`, segundos Unix para ordenar
+temporalmente) y la columna `Late_delivery_risk` (0/1). Su ruta se define en
 `config.yaml` (`data.cleaned_path`, por defecto `data/cleaned/orders.parquet`).
 
 Los datos se organizan en `data/raw/` (ficheros fuente, como el CSV de Kaggle)
@@ -203,9 +204,25 @@ Parquet, ejecuta `python -m src.data.clean`; acepta `--input` y `--output`.
 La limpieza valida la etiqueta y los atributos compartidos por pedido, agrega
 las líneas a una fila por `Order Id` y guarda el Parquet definido en
 `src/ml/config.yaml`. Solo conserva señales disponibles al crear el pedido:
-fecha derivada, modo de envío, segmento, mercado, región y agregados de sus
-artículos. Excluye identificadores, datos personales y variables posteriores
-al envío. Se puede cambiar la entrada o salida con `--input` y `--output`.
+timestamp y componentes derivados de la fecha, modo de envío, segmento, mercado,
+región y agregados de sus artículos. Excluye identificadores, datos personales y
+variables posteriores al envío. Se puede cambiar la entrada o salida con
+`--input` y `--output`.
+
+El entrenamiento ordena los pedidos cronológicamente y reserva los segmentos
+más recientes para validación (`validation_size`) y prueba final (`test_size`),
+ambos configurables en `config.yaml`. Solo el segmento de validación se usa
+para *early stopping*; las métricas se calculan una vez sobre el segmento de
+prueba, que no participa en el entrenamiento.
+Si ya existe un Parquet generado con la versión anterior de la limpieza,
+regénéralo con `python -m src.data.clean` antes de entrenar para incluir
+`order_timestamp`.
+
+`src.data.clean.build_shipment_features` aplica la misma agregación y
+codificación al payload de un pedido, alineando las columnas con la lista de
+features del artefacto. Las categorías no vistas se codifican como cero en las
+columnas categóricas aprendidas; el endpoint `/predict` sigue pendiente de
+integración y no consume aún esta transformación.
 
 Estructura:
 

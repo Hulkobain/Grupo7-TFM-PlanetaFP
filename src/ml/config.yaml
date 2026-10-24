@@ -21,9 +21,8 @@ model:
     early_stopping_rounds: 50
 
 validation:
+  validation_size: 0.2
   test_size: 0.2
-  stratify: true
-  random_state: 42
 
 output:
   model_dir: src/ml/artifacts

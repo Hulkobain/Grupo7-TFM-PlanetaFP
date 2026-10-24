@@ -4,7 +4,6 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import joblib
 import xgboost as xgb
 
 
@@ -44,6 +43,7 @@ def save_artifact(
     config: dict,
     n_train: int,
     n_val: int,
+    n_test: int,
 ) -> tuple[Path, Path]:
     out_dir = Path(config["output"]["model_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -60,6 +60,7 @@ def save_artifact(
         "metrics": metrics,
         "n_train": n_train,
         "n_val": n_val,
+        "n_test": n_test,
         "model_params": model.get_params(),
         "model_file": config["output"]["model_file"],
     }

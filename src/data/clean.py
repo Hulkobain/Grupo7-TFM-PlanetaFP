@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -32,6 +34,18 @@ REQUIRED_COLUMNS = [
 ]
 DEFAULT_INPUT = Path("data/raw/DataCoSupplyChainDataset.csv")
 DEFAULT_OUTPUT = Path("data/cleaned/orders.parquet")
+ORDER_LEVEL_FEATURES = [
+    "order_timestamp",
+    "order_hour",
+    "order_day_of_week",
+    "order_month",
+    "num_items",
+    "total_quantity",
+    "total_product_value",
+    "total_discount",
+    "mean_item_discount",
+    "unique_product_categories",
+]
 
 
 def build_order_features(source: pd.DataFrame) -> pd.DataFrame:
@@ -96,10 +110,12 @@ def build_order_features(source: pd.DataFrame) -> pd.DataFrame:
     data["order_hour"] = data[ORDER_DATE_COLUMN].dt.hour
     data["order_day_of_week"] = data[ORDER_DATE_COLUMN].dt.dayofweek
     data["order_month"] = data[ORDER_DATE_COLUMN].dt.month
+    data["order_timestamp"] = data[ORDER_DATE_COLUMN].astype("int64") // 10**9
     data["line_value"] = data["Order Item Product Price"] * data["Order Item Quantity"]
 
     grouped = data.groupby(ORDER_ID_COLUMN, sort=True)
     orders = grouped.agg(
+        order_timestamp=("order_timestamp", "first"),
         order_hour=("order_hour", "first"),
         order_day_of_week=("order_day_of_week", "first"),
         order_month=("order_month", "first"),
@@ -132,6 +148,46 @@ def build_order_features(source: pd.DataFrame) -> pd.DataFrame:
     if non_numeric:
         raise ValueError(f"El dataset limpio contiene columnas no numéricas: {non_numeric}")
     return orders
+
+
+def build_shipment_features(
+    shipment: Mapping[str, Any],
+    feature_names: Sequence[str],
+) -> pd.DataFrame:
+    items = shipment.get("order_items")
+    if not isinstance(items, list) or not items:
+        raise ValueError("order_items debe ser una lista no vacía")
+
+    item_rows = []
+    for index, item in enumerate(items):
+        if not isinstance(item, Mapping):
+            raise ValueError("Cada elemento de order_items debe ser un objeto")
+        item_rows.append(
+            {
+                ORDER_ID_COLUMN: "prediction",
+                ITEM_ID_COLUMN: index,
+                TARGET_COLUMN: 0,
+                ORDER_DATE_COLUMN: shipment.get("order_date"),
+                "Shipping Mode": shipment.get("shipping_mode"),
+                "Customer Segment": shipment.get("customer_segment"),
+                "Market": shipment.get("market"),
+                "Order Region": shipment.get("order_region"),
+                "Product Category Id": item.get("product_category_id"),
+                "Order Item Product Price": item.get("product_price"),
+                "Order Item Quantity": item.get("order_item_quantity"),
+                "Order Item Discount": item.get("order_item_discount"),
+            }
+        )
+
+    transformed = build_order_features(pd.DataFrame(item_rows)).drop(
+        columns=[TARGET_COLUMN]
+    )
+    missing_base_features = sorted(set(ORDER_LEVEL_FEATURES) - set(feature_names))
+    if missing_base_features:
+        raise ValueError(
+            f"El artefacto no contiene features de pedido obligatorias: {missing_base_features}"
+        )
+    return transformed.reindex(columns=list(feature_names), fill_value=0)
 
 
 def clean_csv(input_path: Path = DEFAULT_INPUT, output_path: Path = DEFAULT_OUTPUT) -> pd.DataFrame:
