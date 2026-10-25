@@ -41,6 +41,8 @@ Grupo7-TFM-PlanetaFP/
 │   │   └── webhooks.py
 │   ├── dashboard/
 │   │   └── app.py
+│   ├── data/
+│   │   └── clean.py
 │   └── ml/
 │       ├── config.yaml
 │       ├── config.py
@@ -167,12 +169,12 @@ Se mantiene bajo `src/` para respetar la convención de paquetes `src.<módulo>`
 Dockerfile (`api`, `dashboard`) solo copian su subdirectorio, así que las
 dependencias de ML nunca entran en las imágenes desplegables.
 
-`src/ml` es **solo entrenamiento**: carga un fichero limpio a nivel de pedido,
-entrena y guarda el artefacto. La carga, limpieza y agregación del CSV crudo
-(`loader`, `target`, `features`) es responsabilidad del pipeline de datos.
+`src/data` limpia y agrega el CSV de DataCo a nivel de pedido. `src/ml` carga el
+fichero resultante, entrena y guarda el artefacto.
 
 **Contrato de entrada:** un fichero Parquet a nivel de pedido con una columna
-por feature y la columna `Late_delivery_risk` (0/1). Su ruta se define en
+por feature (incluido `order_timestamp`, segundos Unix para ordenar
+temporalmente) y la columna `Late_delivery_risk` (0/1). Su ruta se define en
 `config.yaml` (`data.cleaned_path`, por defecto `data/cleaned/orders.parquet`).
 
 Los datos se organizan en `data/raw/` (ficheros fuente, como el CSV de Kaggle)
@@ -183,6 +185,61 @@ Objetivo: predecir la probabilidad de retraso de un envío. `XGBClassifier` con
 `objective: binary:logistic` produce `P(retraso) ∈ [0,1]`. El porcentaje de
 riesgo es `100 × P`, que es lo que `/predict` expondrá como `delay_probability`
 (`delay_risk` se deriva con el umbral `model.threshold`, por defecto 0.5).
+
+### Preparación de DataCo
+
+El fichero de entrenamiento es `data/raw/DataCoSupplyChainDataset.csv`.
+`DescriptionDataCoSupplyChain.csv` sirve como diccionario de datos y
+`tokenized_access_logs.csv` es una fuente distinta, no utilizada para predecir
+retrasos de pedidos. Instala `environment/requirements-ml.txt` (incluye la
+  librería `kagglehub`) y descarga los tres CSV desde la raíz:
+
+
+```bash
+python -m src.data.download
+```
+
+No se requieren credenciales de Kaggle para descargar el dataset. Si lo necesitas
+para recursos privados, configura `KAGGLE_API_TOKEN` o `kaggle.json`.
+Usa `--output` para cambiar el destino (por defecto `data/raw/`) y
+`--force` para volver a descargarlos.
+
+`python -m src.data.clean` y `python -m src.ml.train --raw-data ...` descargan
+automáticamente los CSV que falten antes de limpiar; añade `--no-download` para
+desactivar esa descarga. Para regenerar solo el Parquet:
+
+```powershell
+python -m src.data.clean
+```
+
+Esto genera el Parquet configurado. Para limpiar y entrenar en un solo paso:
+
+```powershell
+python -m src.ml.train --raw-data data/raw/DataCoSupplyChainDataset.csv
+```
+
+La limpieza valida la etiqueta y los atributos compartidos por pedido, agrega
+las líneas a una fila por `Order Id` y guarda el Parquet definido en
+`src/ml/config.yaml`. Solo conserva señales disponibles al crear el pedido:
+timestamp y componentes derivados de la fecha, modo de envío, segmento, mercado,
+región y agregados de sus artículos. Excluye identificadores, datos personales y
+variables posteriores al envío. Se puede cambiar la entrada o salida con
+`--input` y `--output`.
+
+El entrenamiento ordena los pedidos cronológicamente y reserva los segmentos
+más recientes para validación (`validation_size`) y prueba final (`test_size`),
+ambos configurables en `config.yaml`. Solo el segmento de validación se usa
+para *early stopping*; las métricas se calculan una vez sobre el segmento de
+prueba, que no participa en el entrenamiento.
+Si ya existe un Parquet generado con la versión anterior de la limpieza,
+regénéralo con `python -m src.data.clean` antes de entrenar para incluir
+`order_timestamp`.
+
+`src.data.clean.build_shipment_features` aplica la misma agregación y
+codificación al payload de un pedido, alineando las columnas con la lista de
+features del artefacto. Las categorías no vistas se codifican como cero en las
+columnas categóricas aprendidas; el endpoint `/predict` sigue pendiente de
+integración y no consume aún esta transformación.
 
 Estructura:
 
@@ -196,14 +253,20 @@ src/ml/
 └── train.py        # punto de entrada CLI
 ```
 
-Para entrenar (requiere el fichero limpio en `data/cleaned/orders.parquet`):
+Para entrenar directamente desde un fichero ya limpio:
 
 ```bash
 pip install -r environment/requirements-ml.txt
 python -m src.ml.train
 ```
 
-El artefacto se guarda en `src/ml/artifacts/` (ignorado por git): el modelo
-(`delay_risk_xgb.json`) y `model_metadata.json` con features, métricas, umbral y
-parámetros. Cuando se integre el modelo en `/predict`, se carga desde ese
-directorio.
+Los artefactos se guardan en `src/ml/artifacts/` (ignorado por git):
+
+- `delay_risk_xgb.json`: modelo en formato nativo de XGBoost, portable entre
+  versiones. Se carga con `xgb.XGBClassifier().load_model(...)`.
+- `delay_risk_xgb.joblib`: el `XGBClassifier` completo serializado con joblib,
+  listo para usar desde Python/sklearn con `joblib.load(...)`.
+- `model_metadata.json`: features, métricas, umbral, parámetros y nombres de los
+  ficheros del modelo.
+
+Cuando se integre el modelo en `/predict`, se carga desde ese directorio.
