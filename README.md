@@ -192,16 +192,17 @@ El fichero de entrenamiento es `data/raw/DataCoSupplyChainDataset.csv`.
 `DescriptionDataCoSupplyChain.csv` sirve como diccionario de datos y
 `tokenized_access_logs.csv` es una fuente distinta, no utilizada para predecir
 retrasos de pedidos. Instala `environment/requirements-ml.txt` (incluye la
-librería `kaggle`) y descarga los tres CSV desde la raíz:
+  librería `kagglehub`) y descarga los tres CSV desde la raíz:
+
 
 ```bash
 python -m src.data.download
 ```
 
-Requiere credenciales de Kaggle: `kaggle.json` en `~/.kaggle/kaggle.json` o las
-variables `KAGGLE_USERNAME` y `KAGGLE_KEY` (también se admite
-`KAGGLE_API_TOKEN`). Usa `--output` para cambiar el destino (por defecto
-`data/raw/`) y `--force` para volver a descargarlos.
+No se requieren credenciales de Kaggle para descargar el dataset. Si lo necesitas
+para recursos privados, configura `KAGGLE_API_TOKEN` o `kaggle.json`.
+Usa `--output` para cambiar el destino (por defecto `data/raw/`) y
+`--force` para volver a descargarlos.
 
 `python -m src.data.clean` y `python -m src.ml.train --raw-data ...` descargan
 automáticamente los CSV que falten antes de limpiar; añade `--no-download` para
