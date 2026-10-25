@@ -27,4 +27,5 @@ validation:
 output:
   model_dir: src/ml/artifacts
   model_file: delay_risk_xgb.json
+  joblib_file: delay_risk_xgb.joblib
   metadata_file: model_metadata.json

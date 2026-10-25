@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 import pytest
@@ -25,15 +26,22 @@ def test_run_pipeline_on_cleaned_csv(tmp_path) -> None:
     metrics = run(Path("src/ml/config.yaml"), cleaned, out)
     assert 0.0 <= metrics["roc_auc"] <= 1.0
     assert (out / "delay_risk_xgb.json").exists()
+    assert (out / "delay_risk_xgb.joblib").exists()
     assert (out / "model_metadata.json").exists()
     restored = xgb.XGBClassifier()
     restored.load_model(str(out / "delay_risk_xgb.json"))
     assert restored.predict_proba([[1, 1, 10.0]]).shape == (1, 2)
+    restored_joblib = joblib.load(out / "delay_risk_xgb.joblib")
+    np.testing.assert_allclose(
+        restored_joblib.predict_proba([[1, 1, 10.0]]),
+        restored.predict_proba([[1, 1, 10.0]]),
+    )
     metadata = json.loads((out / "model_metadata.json").read_text(encoding="utf-8"))
     assert metadata["n_train"] == 72
     assert metadata["n_val"] == 24
     assert metadata["n_test"] == 24
     assert metadata["metrics"] == metrics
+    assert metadata["joblib_file"] == "delay_risk_xgb.joblib"
 
 
 def test_temporal_split_keeps_test_after_validation_and_train() -> None:

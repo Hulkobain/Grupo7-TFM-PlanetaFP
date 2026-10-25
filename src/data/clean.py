@@ -8,6 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from src.data.download import RAW_FILENAMES, ensure_raw_data
+
 TARGET_COLUMN = "Late_delivery_risk"
 ORDER_ID_COLUMN = "Order Id"
 ITEM_ID_COLUMN = "Order Item Id"
@@ -214,7 +216,18 @@ def main() -> None:
     )
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--no-download",
+        action="store_true",
+        help="No descarga los CSV de Kaggle si el fichero de entrada no existe.",
+    )
     args = parser.parse_args()
+
+    if not args.input.is_file():
+        if args.no_download or args.input.name not in RAW_FILENAMES:
+            parser.error(f"No existe el CSV de entrada: {args.input}")
+        print(f"CSV no encontrado; descargando desde Kaggle en {args.input.parent}...")
+        ensure_raw_data(args.input.parent)
 
     orders = clean_csv(args.input, args.output)
     print(f"Pedidos limpios: {len(orders)} | columnas: {len(orders.columns)}")

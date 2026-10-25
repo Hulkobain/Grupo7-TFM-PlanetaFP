@@ -191,15 +191,31 @@ riesgo es `100 × P`, que es lo que `/predict` expondrá como `delay_probability
 El fichero de entrenamiento es `data/raw/DataCoSupplyChainDataset.csv`.
 `DescriptionDataCoSupplyChain.csv` sirve como diccionario de datos y
 `tokenized_access_logs.csv` es una fuente distinta, no utilizada para predecir
-retrasos de pedidos. Instala `environment/requirements-ml.txt` y ejecuta desde
-la raíz:
+retrasos de pedidos. Instala `environment/requirements-ml.txt` (incluye la
+librería `kaggle`) y descarga los tres CSV desde la raíz:
+
+```bash
+python -m src.data.download
+```
+
+Requiere credenciales de Kaggle: `kaggle.json` en `~/.kaggle/kaggle.json` o las
+variables `KAGGLE_USERNAME` y `KAGGLE_KEY` (también se admite
+`KAGGLE_API_TOKEN`). Usa `--output` para cambiar el destino (por defecto
+`data/raw/`) y `--force` para volver a descargarlos.
+
+`python -m src.data.clean` y `python -m src.ml.train --raw-data ...` descargan
+automáticamente los CSV que falten antes de limpiar; añade `--no-download` para
+desactivar esa descarga. Para regenerar solo el Parquet:
+
+```powershell
+python -m src.data.clean
+```
+
+Esto genera el Parquet configurado. Para limpiar y entrenar en un solo paso:
 
 ```powershell
 python -m src.ml.train --raw-data data/raw/DataCoSupplyChainDataset.csv
 ```
-
-Esto genera el Parquet configurado y entrena el modelo. Para regenerar solo el
-Parquet, ejecuta `python -m src.data.clean`; acepta `--input` y `--output`.
 
 La limpieza valida la etiqueta y los atributos compartidos por pedido, agrega
 las líneas a una fila por `Order Id` y guarda el Parquet definido en
@@ -243,7 +259,13 @@ pip install -r environment/requirements-ml.txt
 python -m src.ml.train
 ```
 
-El artefacto se guarda en `src/ml/artifacts/` (ignorado por git): el modelo
-(`delay_risk_xgb.json`) y `model_metadata.json` con features, métricas, umbral y
-parámetros. Cuando se integre el modelo en `/predict`, se carga desde ese
-directorio.
+Los artefactos se guardan en `src/ml/artifacts/` (ignorado por git):
+
+- `delay_risk_xgb.json`: modelo en formato nativo de XGBoost, portable entre
+  versiones. Se carga con `xgb.XGBClassifier().load_model(...)`.
+- `delay_risk_xgb.joblib`: el `XGBClassifier` completo serializado con joblib,
+  listo para usar desde Python/sklearn con `joblib.load(...)`.
+- `model_metadata.json`: features, métricas, umbral, parámetros y nombres de los
+  ficheros del modelo.
+
+Cuando se integre el modelo en `/predict`, se carga desde ese directorio.

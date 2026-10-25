@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import joblib
 import xgboost as xgb
 
 
@@ -44,12 +45,15 @@ def save_artifact(
     n_train: int,
     n_val: int,
     n_test: int,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     out_dir = Path(config["output"]["model_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
     model_path = out_dir / config["output"]["model_file"]
     model.get_booster().save_model(str(model_path))
+
+    joblib_path = out_dir / config["output"]["joblib_file"]
+    joblib.dump(model, joblib_path)
 
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -63,7 +67,8 @@ def save_artifact(
         "n_test": n_test,
         "model_params": model.get_params(),
         "model_file": config["output"]["model_file"],
+        "joblib_file": config["output"]["joblib_file"],
     }
     meta_path = out_dir / config["output"]["metadata_file"]
     meta_path.write_text(json.dumps(metadata, indent=2, default=str), encoding="utf-8")
-    return model_path, meta_path
+    return model_path, joblib_path, meta_path
