@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import joblib
+import lightgbm as lgb
 import xgboost as xgb
 
 
@@ -16,7 +17,22 @@ def build_model(config: dict) -> tuple[xgb.XGBClassifier, int | None]:
         eval_metric=config["model"]["eval_metric"],
         random_state=config["seed"],
         n_jobs=-1,
+        verbosity=0,
         early_stopping_rounds=early,
+        **hp,
+    )
+    return model, early
+
+
+def build_lightgbm_model(config: dict) -> tuple[lgb.LGBMClassifier, int | None]:
+    hp = dict(config["lightgbm"]["hyperparams"])
+    early = hp.pop("early_stopping_rounds", None)
+    model = lgb.LGBMClassifier(
+        objective=config["lightgbm"]["objective"],
+        eval_metric=config["lightgbm"]["eval_metric"],
+        random_state=config["seed"],
+        n_jobs=-1,
+        verbosity=-1,
         **hp,
     )
     return model, early
@@ -33,6 +49,24 @@ def train(
     kwargs = {}
     if early_rounds:
         kwargs["eval_set"] = [(X_val, y_val)]
+    model.fit(X_train, y_train, verbose=False, **kwargs)
+    return model
+
+
+def train_lightgbm(
+    model: lgb.LGBMClassifier,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    early_rounds: int | None,
+    eval_metric: str,
+) -> lgb.LGBMClassifier:
+    kwargs = {}
+    if early_rounds:
+        kwargs["eval_set"] = [(X_val, y_val)]
+        kwargs["eval_metric"] = eval_metric
+        kwargs["callbacks"] = [lgb.early_stopping(early_rounds, verbose=False)]
     model.fit(X_train, y_train, **kwargs)
     return model
 

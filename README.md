@@ -49,6 +49,7 @@ Grupo7-TFM-PlanetaFP/
 │       ├── model.py
 │       ├── evaluate.py
 │       ├── pipeline.py
+│       ├── compare.py
 │       └── train.py
 ├── tests/
 ├── environment/
@@ -159,7 +160,7 @@ haya modelo; todavía no ofrece un histórico, agregados ni coordenadas para
 alimentar esas vistas. El mapa y los indicadores se conectarán cuando estén
 disponibles los datos y contratos correspondientes.
 
-## Entrenamiento del modelo (XGBoost)
+## Entrenamiento del modelo (XGBoost) y comparación con LightGBM
 
 El código de entrenamiento vive en `src/ml`, separado de la API y del panel
 porque tiene su propio conjunto de dependencias (`environment/requirements-ml.txt`)
@@ -181,10 +182,12 @@ Los datos se organizan en `data/raw/` (ficheros fuente, como el CSV de Kaggle)
 y `data/cleaned/` (salida del pipeline de datos, regenerable). Ambos directorios
 están ignorados por git y solo se conservan sus `.gitkeep`.
 
-Objetivo: predecir la probabilidad de retraso de un envío. `XGBClassifier` con
-`objective: binary:logistic` produce `P(retraso) ∈ [0,1]`. El porcentaje de
-riesgo es `100 × P`, que es lo que `/predict` expondrá como `delay_probability`
-(`delay_risk` se deriva con el umbral `model.threshold`, por defecto 0.5).
+Objetivo: predecir la probabilidad de retraso de un envío. El modelo principal
+es `XGBClassifier` con `objective: binary:logistic`, que produce
+`P(retraso) ∈ [0,1]`. El porcentaje de riesgo es `100 × P`, que es lo que
+`/predict` expondrá como `delay_probability` (`delay_risk` se deriva con el
+umbral `model.threshold`, por defecto 0.5). LightGBM se mantiene como modelo
+alternativo de comparación, no como artefacto desplegado.
 
 ### Preparación de DataCo
 
@@ -247,9 +250,10 @@ Estructura:
 src/ml/
 ├── config.yaml     # cleaned_path, hiperparámetros, split, umbral, rutas
 ├── config.py       # carga de config.yaml
-├── model.py        # XGBClassifier: build/train/save + metadata
+├── model.py        # XGBClassifier y LGBMClassifier: build/train
 ├── evaluate.py     # métricas y conversión probabilidad → porcentaje
 ├── pipeline.py     # load limpio → split → train → evaluate → save
+├── compare.py      # XGBoost vs LightGBM sobre el mismo split
 └── train.py        # punto de entrada CLI
 ```
 
@@ -270,3 +274,30 @@ Los artefactos se guardan en `src/ml/artifacts/` (ignorado por git):
   ficheros del modelo.
 
 Cuando se integre el modelo en `/predict`, se carga desde ese directorio.
+
+### Comparación con LightGBM
+
+`src/ml/compare.py` entrena un `LGBMClassifier` alternativo y lo compara con
+XGBoost sobre el mismo split temporal, el mismo `seed` y una capacidad
+equivalente (`max_depth: 6` / `num_leaves: 63`, mismo presupuesto de árboles,
+`learning_rate`, `subsample`, `colsample_bytree` y `reg_lambda`). Ambos usan
+solo el segmento de validación para *early stopping* y se evalúan una única vez
+sobre el segmento de prueba.
+
+```bash
+python -m src.ml.compare
+```
+
+El comando guarda `src/ml/artifacts/model_comparison.json` con las métricas de
+cada modelo, sus hiperparámetros, el tiempo de entrenamiento/predicción y un
+veredicto. La decisión se configura en `config.yaml`:
+
+- `comparison.primary_metric` (`roc_auc` por defecto).
+- `comparison.min_improvement`: margen mínimo que debe superar LightGBM para
+  reemplazar a XGBoost (por defecto `0.005`). Así se evita cambiar de modelo
+  por diferencias que puedan ser ruido.
+
+El campeón es XGBoost y el retador LightGBM. Se mantiene XGBoost salvo que
+LightGBM mejore la métrica principal al menos en `min_improvement`; el campo
+`verdict.reason` del informe deja constancia de la comparación y del tiempo de
+entrenamiento de cada alternativa.
