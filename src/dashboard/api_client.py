@@ -3,13 +3,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
 @dataclass(frozen=True)
 class ApiHealth:
     available: bool
     detail: str
+
+
+@dataclass(frozen=True)
+class ApiPrediction:
+    available: bool
+    detail: str
+    data: dict[str, Any] | None = None
 
 
 def check_api_health(base_url: str, timeout: float = 3) -> ApiHealth:
@@ -32,6 +39,34 @@ def check_api_health(base_url: str, timeout: float = 3) -> ApiHealth:
         return ApiHealth(False, "La API devolvió un estado de salud no válido.")
 
     return ApiHealth(True, "API FastAPI disponible.")
+
+
+def predict_shipment(base_url: str, shipment: dict[str, Any], timeout: float = 10) -> ApiPrediction:
+    endpoint = f"{base_url.rstrip('/')}/predict"
+    data = json.dumps(shipment).encode("utf-8")
+    request = Request(endpoint, data=data, method="POST")
+    request.add_header("Content-Type", "application/json")
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read())
+    except HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8")
+            detail = json.loads(body).get("detail", f"La API respondió con HTTP {exc.code}.")
+        except Exception:
+            detail = f"La API respondió con HTTP {exc.code}."
+        return ApiPrediction(False, detail)
+    except (URLError, TimeoutError, OSError) as exc:
+        reason = exc.reason if isinstance(exc, URLError) else exc
+        return ApiPrediction(False, f"No se pudo conectar con la API ({reason}).")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return ApiPrediction(False, "La API devolvió una respuesta de predicción no válida.")
+
+    if not isinstance(payload, dict):
+        return ApiPrediction(False, "La API devolvió una respuesta de predicción no válida.")
+
+    return ApiPrediction(True, "Predicción obtenida correctamente.", payload)
 
 
 def generate_demo_prediction(shipment: dict[str, Any]) -> dict[str, Any]:
