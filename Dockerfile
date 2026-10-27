@@ -24,8 +24,11 @@ CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS dashboard
 
+ENV PYTHONPATH=/app
+
 COPY environment/requirements-dashboard.txt .
 RUN pip install --no-cache-dir -r requirements-dashboard.txt
+COPY --chown=app:app src/__init__.py ./src/__init__.py
 COPY --chown=app:app src/dashboard/ ./src/dashboard/
 USER 10001:10001
 EXPOSE 8501
