@@ -1,16 +1,27 @@
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+import logging
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, status
 
 from .inference import InferenceService, load_inference_service
 from .schemas import HealthResponse, IngestResponse, PredictionResponse, ShipmentFeatures
+from .webhooks import is_webhook_configured, send_high_risk_alert
+
+logger = logging.getLogger(__name__)
+
+
+def create_webhook_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.inference_service = load_inference_service()
-    yield
+    async with create_webhook_client() as webhook_client:
+        app.state.webhook_client = webhook_client
+        yield
 
 
 app = FastAPI(
@@ -26,7 +37,7 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-def _predict(
+async def _predict(
     shipment: ShipmentFeatures,
     request: Request,
 ) -> PredictionResponse:
@@ -40,7 +51,20 @@ def _predict(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Prediction model is not configured.",
         )
-    return inference_service.predict(shipment.model_dump(mode="python"))
+    prediction = inference_service.predict(shipment.model_dump(mode="python"))
+    if prediction.delay_risk and is_webhook_configured():
+        webhook_client: httpx.AsyncClient = request.app.state.webhook_client
+        try:
+            await send_high_risk_alert(
+                shipment.model_dump(mode="json"),
+                prediction.model_dump(mode="json"),
+                webhook_client,
+            )
+        except (httpx.HTTPError, ValueError):
+            logger.exception(
+                "Could not deliver preventive high-risk webhook; returning prediction"
+            )
+    return prediction
 
 
 @app.post(
@@ -49,11 +73,11 @@ def _predict(
     status_code=status.HTTP_200_OK,
     tags=["shipments"],
 )
-def ingest_shipment(
+async def ingest_shipment(
     shipment: ShipmentFeatures,
     request: Request,
 ) -> IngestResponse:
-    prediction = _predict(shipment, request)
+    prediction = await _predict(shipment, request)
     return IngestResponse(
         status="processed",
         shipment=shipment,
@@ -66,8 +90,8 @@ def ingest_shipment(
     response_model=PredictionResponse,
     tags=["predictions"],
 )
-def predict_shipment(
+async def predict_shipment(
     shipment: ShipmentFeatures,
     request: Request,
 ) -> PredictionResponse:
-    return _predict(shipment, request)
+    return await _predict(shipment, request)
