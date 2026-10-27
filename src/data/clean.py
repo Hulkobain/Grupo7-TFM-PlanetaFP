@@ -8,8 +8,6 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.data.download import RAW_FILENAMES, ensure_raw_data
-
 TARGET_COLUMN = "Late_delivery_risk"
 ORDER_ID_COLUMN = "Order Id"
 ITEM_ID_COLUMN = "Order Item Id"
@@ -189,7 +187,19 @@ def build_shipment_features(
         raise ValueError(
             f"El artefacto no contiene features de pedido obligatorias: {missing_base_features}"
         )
-    return transformed.reindex(columns=list(feature_names), fill_value=0)
+    transformed = transformed.reindex(columns=list(feature_names), fill_value=0)
+    categorical_prefixes = tuple(
+        f"{column}_" for column in ORDER_CATEGORICAL_COLUMNS
+    )
+    categorical_features = [
+        column
+        for column in feature_names
+        if column.startswith(categorical_prefixes)
+    ]
+    transformed[categorical_features] = transformed[categorical_features].astype(
+        "int8"
+    )
+    return transformed
 
 
 def clean_csv(input_path: Path = DEFAULT_INPUT, output_path: Path = DEFAULT_OUTPUT) -> pd.DataFrame:
@@ -224,6 +234,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if not args.input.is_file():
+        from src.data.download import RAW_FILENAMES, ensure_raw_data
+
         if args.no_download or args.input.name not in RAW_FILENAMES:
             parser.error(f"No existe el CSV de entrada: {args.input}")
         print(f"CSV no encontrado; descargando desde Kaggle en {args.input.parent}...")

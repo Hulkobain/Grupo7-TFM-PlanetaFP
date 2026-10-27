@@ -3,6 +3,10 @@ services:
     build:
       context: .
       target: api
+    environment:
+      MODEL_ARTIFACT_DIR: /app/src/ml/artifacts
+    volumes:
+      - ${MODEL_ARTIFACT_HOST_DIR:-./src/ml/artifacts}:/app/src/ml/artifacts:ro
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     healthcheck:
