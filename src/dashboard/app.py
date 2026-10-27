@@ -6,11 +6,10 @@ import streamlit as st
 from src.dashboard.api_client import (
     check_api_health,
     create_demo_shipment_payload,
-    generate_demo_prediction,
+    predict_shipment,
 )
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-
 RISK_LEVELS = ["Todos", "Alto", "Medio", "Bajo"]
 REGION_OPTIONS = ["Todas", "Norte", "Centro", "Sur", "Europa", "Latam"]
 
@@ -105,10 +104,10 @@ with status_columns[0]:
     st.info("Disponibilidad: " + ("OK" if health.available else "Sin datos"))
 with status_columns[1]:
     st.markdown("#### Modelo ML")
-    st.warning("Sin artefacto de predicción configurado todavía.")
+    st.success("Artefacto cargado en la API (XGBoost).")
 with status_columns[2]:
     st.markdown("#### Datos")
-    st.warning("Se usan datos de demostración del frontend mientras el backend publica historial y agregados.")
+    st.info("El formulario usa el contrato /predict de la API.")
 
 st.subheader("Análisis de riesgo")
 map_column, risk_column = st.columns(2)
@@ -128,10 +127,37 @@ shipment_payload = create_demo_shipment_payload()
 with st.form("demo_prediction_form"):
     st.write("Formulario de prueba para el contrato actual de suministro")
     order_date = st.date_input("Fecha del pedido", value=date.today())
-    shipping_mode = st.selectbox("Modo de envío", ["Air", "Road", "Sea"])
-    customer_segment = st.selectbox("Segmento", ["Corporate", "Consumer", "Home Office"])
-    market = st.selectbox("Mercado", ["Europe", "North America", "Latam"])
-    order_region = st.selectbox("Región", ["Norte", "Centro", "Sur", "Latam", "Europa"])
+    shipping_mode = st.selectbox("Modo de envío", ["First Class", "Same Day", "Second Class", "Standard Class"])
+    customer_segment = st.selectbox("Segmento", ["Consumer", "Corporate", "Home Office"])
+    market = st.selectbox("Mercado", ["Africa", "Europe", "LATAM", "Pacific Asia", "USCA"])
+    order_region = st.selectbox(
+        "Región",
+        [
+            "Canada",
+            "Caribbean",
+            "Central Africa",
+            "Central America",
+            "Central Asia",
+            "East Africa",
+            "East of USA",
+            "Eastern Asia",
+            "Eastern Europe",
+            "North Africa",
+            "Northern Europe",
+            "Oceania",
+            "South America",
+            "South Asia",
+            "South of  USA",
+            "Southeast Asia",
+            "Southern Africa",
+            "Southern Europe",
+            "US Center",
+            "West Africa",
+            "West Asia",
+            "West of USA",
+            "Western Europe",
+        ],
+    )
     item_count = st.slider("Nº de líneas de pedido", min_value=1, max_value=5, value=2)
 
     items = []
@@ -179,10 +205,15 @@ with st.form("demo_prediction_form"):
             "order_region": order_region,
             "order_items": items,
         }
-        prediction = generate_demo_prediction(payload)
+        prediction = predict_shipment(API_BASE_URL, payload)
         st.subheader("Resultado de la simulación")
-        st.metric("Probabilidad de retraso", f"{prediction['delay_probability']:.2%}")
-        st.info(f"Nivel: {prediction['risk_level']} · {prediction['message']}")
+        if not prediction.available or prediction.data is None:
+            st.error(prediction.detail)
+        else:
+            data = prediction.data
+            st.metric("Probabilidad de retraso", f"{data['delay_probability']:.2%}")
+            risk_label = "Alto" if data.get("delay_risk") else "Bajo"
+            st.info(f"Nivel: {risk_label} · Umbral: {data['threshold']:.2f} · {data['interpretation']}")
 
 st.subheader("Envíos recientes")
 st.table(recent_shipments)
