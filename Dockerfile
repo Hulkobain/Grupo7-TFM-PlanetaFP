@@ -10,9 +10,14 @@ RUN groupadd --system --gid 10001 app \
 
 FROM base AS api
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY environment/requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 COPY --chown=app:app src/api/ ./src/api/
+COPY --chown=app:app src/data/ ./src/data/
+RUN mkdir -p src/ml/artifacts && chown -R app:app src/ml
 USER 10001:10001
 EXPOSE 8000
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

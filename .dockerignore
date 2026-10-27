@@ -12,3 +12,4 @@ __pycache__
 tests
 data
 docs
+src/ml/artifacts
