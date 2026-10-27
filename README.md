@@ -118,13 +118,22 @@ El CSV crudo no se debe subir al repositorio; su ruta local está protegida en
 
 ### Alertas por webhook
 
-El módulo `src.api.webhooks` ofrece `send_high_risk_alert`, que envía por HTTP
-POST el JSON de la predicción cuando `Risk_Level` es `"Alto"`. La URL se
-configura con `WEBHOOK_URL`; `WEBHOOK_MAX_ATTEMPTS` permite ajustar el número
-de intentos (por defecto, 3). Se reintentan fallos de transporte y respuestas
-transitorias HTTP 408, 429 y 5xx; otros errores HTTP se notifican al llamador.
-El envío de alertas sigue desacoplado de `/ingest` y `/predict`; falta acordar
-el contrato de las alertas antes de activar ese flujo.
+Cuando una predicción activa `delay_risk` (probabilidad igual o superior al
+umbral del modelo, 0,5 por ahora), tanto `/ingest` como `/predict` envían una
+notificación HTTP POST a `WEBHOOK_URL`, si está configurada. El payload incluye
+el evento `shipment.delay_risk.preventive_alert`, los datos validados del
+pedido y la probabilidad, umbral e interpretación preventiva de la predicción;
+no incluye identificadores ni datos personales. El aviso es preventivo, no una
+confirmación de retraso.
+
+`WEBHOOK_MAX_ATTEMPTS` configura los intentos (por defecto, 3). Se reintentan
+fallos de transporte y respuestas HTTP 408, 429 y 5xx, con espera exponencial y
+timeout de 5 segundos por intento. Otros errores HTTP se registran sin reintento.
+Si el destino falla después de los reintentos, se registra el error y la API
+conserva la respuesta de inferencia. Sin `WEBHOOK_URL`, las predicciones se
+devuelven normalmente y no se envía ninguna alerta. El envío usa I/O asíncrona,
+pero se completa antes de responder, por lo que los reintentos pueden aumentar
+la latencia de esa petición.
 
 Para ejecutar localmente desde la raíz del repositorio:
 
