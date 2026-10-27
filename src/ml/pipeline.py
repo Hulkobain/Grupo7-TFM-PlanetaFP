@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,18 @@ from .evaluate import evaluate
 from .model import build_model, save_artifact, train
 
 TIMESTAMP_COLUMN = "order_timestamp"
+
+
+@dataclass
+class DatasetSplits:
+    target_column: str
+    feature_names: list[str]
+    X_train: pd.DataFrame
+    X_val: pd.DataFrame
+    X_test: pd.DataFrame
+    y_train: np.ndarray
+    y_val: np.ndarray
+    y_test: np.ndarray
 
 
 def _load_cleaned(path: Path) -> pd.DataFrame:
@@ -89,16 +102,9 @@ def _temporal_split(
     )
 
 
-def run(
-    config_path: Path,
-    data_path: Path | None = None,
-    output_dir: Path | None = None,
-) -> dict:
-    config = load_config(config_path)
+def prepare_data(config: dict, data_path: Path | None = None) -> DatasetSplits:
     if data_path is not None:
         config["data"]["cleaned_path"] = str(data_path)
-    if output_dir is not None:
-        config["output"]["model_dir"] = str(output_dir)
 
     target_col = config["data"]["target_column"]
     df = _load_cleaned(Path(config["data"]["cleaned_path"]))
@@ -119,19 +125,48 @@ def run(
         config["validation"]["validation_size"],
         config["validation"]["test_size"],
     )
+    return DatasetSplits(
+        target_column=target_col,
+        feature_names=feature_names,
+        X_train=X_train,
+        X_val=X_val,
+        X_test=X_test,
+        y_train=y_train,
+        y_val=y_val,
+        y_test=y_test,
+    )
+
+
+def run(
+    config_path: Path,
+    data_path: Path | None = None,
+    output_dir: Path | None = None,
+) -> dict:
+    config = load_config(config_path)
+    if output_dir is not None:
+        config["output"]["model_dir"] = str(output_dir)
+
+    splits = prepare_data(config, data_path)
 
     model, early_rounds = build_model(config)
-    train(model, X_train, y_train, X_val, y_val, early_rounds)
+    train(
+        model,
+        splits.X_train,
+        splits.y_train,
+        splits.X_val,
+        splits.y_val,
+        early_rounds,
+    )
 
-    y_prob = model.predict_proba(X_test)[:, 1]
-    metrics = evaluate(y_test, y_prob, config["model"]["threshold"])
+    y_prob = model.predict_proba(splits.X_test)[:, 1]
+    metrics = evaluate(splits.y_test, y_prob, config["model"]["threshold"])
     save_artifact(
         model,
-        feature_names,
+        splits.feature_names,
         metrics,
         config,
-        len(X_train),
-        len(X_val),
-        len(X_test),
+        len(splits.X_train),
+        len(splits.X_val),
+        len(splits.X_test),
     )
     return metrics
