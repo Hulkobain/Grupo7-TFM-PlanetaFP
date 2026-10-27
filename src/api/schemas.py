@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -56,15 +56,30 @@ class ShipmentFeatures(BaseModel):
     )
 
 
-class IngestResponse(BaseModel):
-    status: str
-    shipment: ShipmentFeatures
-
-
 class HealthResponse(BaseModel):
     status: str
 
 
 class PredictionResponse(BaseModel):
-    delay_risk: bool
-    delay_probability: float = Field(ge=0, le=1)
+    delay_risk: bool = Field(
+        description="Aviso preventivo: true cuando delay_probability alcanza el threshold; no confirma un retraso.",
+    )
+    delay_probability: float = Field(
+        ge=0,
+        le=1,
+        description="Probabilidad estimada por el modelo, entre 0 y 1.",
+    )
+    threshold: float = Field(
+        ge=0,
+        le=1,
+        description="Umbral aplicado para activar el aviso preventivo.",
+    )
+    interpretation: Literal[
+        "Aviso preventivo, no confirmación de que el pedido vaya a retrasarse."
+    ] = "Aviso preventivo, no confirmación de que el pedido vaya a retrasarse."
+
+
+class IngestResponse(BaseModel):
+    status: str
+    shipment: ShipmentFeatures
+    prediction: PredictionResponse

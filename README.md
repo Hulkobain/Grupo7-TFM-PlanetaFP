@@ -67,16 +67,22 @@ Grupo7-TFM-PlanetaFP/
 La API FastAPI expone:
 
 - `GET /health`: comprobación de disponibilidad del servicio.
-- `POST /ingest`: valida un envío y devuelve sus datos normalizados. Esta primera
-  versión no persiste ni reenvía los registros.
-- `POST /predict`: valida el mismo contrato de entrada que `/ingest`. Devuelve
-  `503 Service Unavailable` hasta que se configure el artefacto del modelo; no
-  genera predicciones simuladas.
+- `POST /ingest`: valida un envío, lo transforma con las features del modelo y
+  devuelve los datos normalizados junto con la predicción. No persiste los
+  registros.
+- `POST /predict`: valida el mismo contrato y devuelve la predicción real del
+  modelo. Ambos endpoints responden `503 Service Unavailable` si el artefacto
+  no está configurado; no generan predicciones simuladas.
+
+La respuesta indica `delay_risk` como aviso preventivo cuando la probabilidad
+alcanza el umbral (0,5 por ahora); no confirma que el pedido vaya a retrasarse.
+También devuelve la probabilidad y el umbral aplicado. El equipo revisará el
+equilibrio entre falsas alarmas y retrasos no detectados antes de cambiarlo.
 
 El contrato inicial contiene solo atributos disponibles al crear el pedido y
 excluye identificadores personales y variables de resultado que podrían causar
-fuga de información. Es un contrato inicial y deberá alinearse con las features
-finales del pipeline de entrenamiento.
+fuga de información. La API transforma estos campos al mismo conjunto de
+features del modelo antes de ejecutar la inferencia.
 
 ### Contrato frente a DataCo
 
@@ -108,8 +114,7 @@ entrada. También se excluyen del contrato las variables posteriores al envío
 `Customer Street`, `Customer Zipcode`, `Customer Id` y `Order Customer Id`.
 El CSV crudo no se debe subir al repositorio; su ruta local está protegida en
 `.gitignore`. En DataCo las filas de un mismo pedido comparten la etiqueta
-`Late_delivery_risk`; el pipeline de ML debe confirmar si entrenará por artículo
-o agregará las features por pedido antes de conectar el modelo a `/predict`.
+`Late_delivery_risk`; el modelo actual entrena y predice a nivel de pedido.
 
 ### Alertas por webhook
 
@@ -118,8 +123,8 @@ POST el JSON de la predicción cuando `Risk_Level` es `"Alto"`. La URL se
 configura con `WEBHOOK_URL`; `WEBHOOK_MAX_ATTEMPTS` permite ajustar el número
 de intentos (por defecto, 3). Se reintentan fallos de transporte y respuestas
 transitorias HTTP 408, 429 y 5xx; otros errores HTTP se notifican al llamador.
-El envío está desacoplado de `/predict` hasta que el modelo esté integrado y se
-acuerde el contrato final de su respuesta.
+El envío de alertas sigue desacoplado de `/ingest` y `/predict`; falta acordar
+el contrato de las alertas antes de activar ese flujo.
 
 Para ejecutar localmente desde la raíz del repositorio:
 
@@ -155,20 +160,18 @@ El Dockerfile define objetivos de construcción independientes (`api` y
 `dashboard`) sobre `python:3.10-slim`. El dashboard actual es la base de la Torre de Control: comprueba la salud de
 la API y reserva las vistas de indicadores operativos, riesgo regional y envíos
 recientes. Muestra estados vacíos explícitos en lugar de inventar predicciones.
-La API actual solo valida la ingesta y `/predict` devuelve `503` mientras no
-haya modelo; todavía no ofrece un histórico, agregados ni coordenadas para
-alimentar esas vistas. El mapa y los indicadores se conectarán cuando estén
-disponibles los datos y contratos correspondientes.
+La API ya ofrece inferencia de riesgo por envío. Todavía no ofrece un histórico,
+agregados ni coordenadas para alimentar las vistas de mapa e indicadores; estas
+se conectarán cuando estén disponibles los datos y contratos correspondientes.
 
 ## Entrenamiento del modelo (XGBoost) y comparación con LightGBM
 
 El código de entrenamiento vive en `src/ml`, separado de la API y del panel
-porque tiene su propio conjunto de dependencias (`environment/requirements-ml.txt`)
-y un ciclo de vida distinto (entrenamiento *offline* por lotes, no desplegable).
-Se mantiene bajo `src/` para respetar la convención de paquetes `src.<módulo>`
-(`src.api`, `src.dashboard`, `src.ml`). Los objetivos de construcción del
-Dockerfile (`api`, `dashboard`) solo copian su subdirectorio, así que las
-dependencias de ML nunca entran en las imágenes desplegables.
+porque tiene un ciclo de vida distinto (entrenamiento *offline* por lotes, no
+desplegable). La imagen de API instala únicamente las dependencias de inferencia
+(NumPy, pandas y XGBoost), no las herramientas de entrenamiento y descarga de
+datos. Los objetivos de construcción del Dockerfile (`api`, `dashboard`) siguen
+siendo independientes.
 
 `src/data` limpia y agrega el CSV de DataCo a nivel de pedido. `src/ml` carga el
 fichero resultante, entrena y guarda el artefacto.
@@ -241,8 +244,9 @@ regénéralo con `python -m src.data.clean` antes de entrenar para incluir
 `src.data.clean.build_shipment_features` aplica la misma agregación y
 codificación al payload de un pedido, alineando las columnas con la lista de
 features del artefacto. Las categorías no vistas se codifican como cero en las
-columnas categóricas aprendidas; el endpoint `/predict` sigue pendiente de
-integración y no consume aún esta transformación.
+columnas categóricas aprendidas. La API carga el modelo nativo de XGBoost y su
+metadata al arrancar; `MODEL_ARTIFACT_DIR` permite cambiar el directorio, cuyo
+valor predeterminado es `src/ml/artifacts`.
 
 Estructura:
 
@@ -301,3 +305,10 @@ El campeón es XGBoost y el retador LightGBM. Se mantiene XGBoost salvo que
 LightGBM mejore la métrica principal al menos en `min_improvement`; el campo
 `verdict.reason` del informe deja constancia de la comparación y del tiempo de
 entrenamiento de cada alternativa.
+
+FastAPI carga `delay_risk_xgb.json` y `model_metadata.json` desde ese directorio.
+Si falta alguno, la API puede arrancar y `/health` seguirá comprobando el
+servicio, pero `/ingest` y `/predict` responderán `503` hasta disponer de ambos.
+Docker monta `src/ml/artifacts/` en solo lectura; puedes indicar otra carpeta
+local con `MODEL_ARTIFACT_HOST_DIR`. Entrena o copia el artefacto a esa ruta
+antes de ejecutar `docker compose up --build`.
