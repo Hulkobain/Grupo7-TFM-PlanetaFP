@@ -119,7 +119,7 @@ def test_build_shipment_features_uses_training_columns_for_unseen_categories() -
     transformed = build_shipment_features(shipment, feature_names)
 
     assert transformed.columns.tolist() == feature_names
-    assert transformed.loc[0, "Shipping Mode_First Class"] == 0
+    assert transformed.loc[0, "Shipping Mode_First Class"] == 1
     assert transformed.loc[0, "Shipping Mode_Standard Class"] == 0
     assert transformed.loc[0, "category_3_items"] == 0
 

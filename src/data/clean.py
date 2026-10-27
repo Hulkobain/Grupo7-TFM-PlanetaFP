@@ -188,9 +188,24 @@ def build_shipment_features(
             f"El artefacto no contiene features de pedido obligatorias: {missing_base_features}"
         )
     transformed = transformed.reindex(columns=list(feature_names), fill_value=0)
+
     categorical_prefixes = tuple(
         f"{column}_" for column in ORDER_CATEGORICAL_COLUMNS
     )
+    for categorical_column in ORDER_CATEGORICAL_COLUMNS:
+        prefix = f"{categorical_column}_"
+        group_columns = [
+            column for column in feature_names if column.startswith(prefix)
+        ]
+        if not group_columns:
+            continue
+        group_values = transformed[group_columns]
+        if group_values.sum(axis=1).eq(0).any():
+            row_mask = group_values.sum(axis=1).eq(0)
+            if row_mask.any():
+                # Asignar al primer valor conocido para dar mayor cobertura a categorías no vistas
+                transformed.loc[row_mask, group_columns[0]] = 1
+
     categorical_features = [
         column
         for column in feature_names

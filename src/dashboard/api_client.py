@@ -28,10 +28,29 @@ def check_api_health(base_url: str, timeout: float = 3) -> ApiHealth:
                 return ApiHealth(False, f"La API respondió con HTTP {response.status}.")
             payload = json.loads(response.read())
     except HTTPError as exc:
+        if exc.code == 503:
+            try:
+                body = exc.read().decode("utf-8")
+                detail = json.loads(body).get("detail", "")
+                if detail:
+                    if "model" in detail.lower():
+                        return ApiHealth(False, "El modelo de predicción no está disponible (503).")
+                    return ApiHealth(False, f"La API no está disponible (503): {detail}")
+            except Exception:
+                pass
+            return ApiHealth(False, "El modelo de predicción no está disponible (503).")
         return ApiHealth(False, f"La API respondió con HTTP {exc.code}.")
-    except (URLError, TimeoutError, OSError) as exc:
-        reason = exc.reason if isinstance(exc, URLError) else exc
+    except TimeoutError:
+        return ApiHealth(False, "Tiempo de espera agotado al conectar con la API.")
+    except URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, TimeoutError):
+            return ApiHealth(False, "Tiempo de espera agotado al conectar con la API.")
         return ApiHealth(False, f"No se pudo conectar con la API ({reason}).")
+    except OSError as exc:
+        if isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
+            return ApiHealth(False, "Tiempo de espera agotado al conectar con la API.")
+        return ApiHealth(False, f"No se pudo conectar con la API ({exc}).")
     except (json.JSONDecodeError, UnicodeDecodeError):
         return ApiHealth(False, "La API devolvió una respuesta de salud no válida.")
 
@@ -53,13 +72,30 @@ def predict_shipment(base_url: str, shipment: dict[str, Any], timeout: float = 1
     except HTTPError as exc:
         try:
             body = exc.read().decode("utf-8")
-            detail = json.loads(body).get("detail", f"La API respondió con HTTP {exc.code}.")
+            detail_json = json.loads(body)
+            detail = detail_json.get("detail", "")
         except Exception:
-            detail = f"La API respondió con HTTP {exc.code}."
-        return ApiPrediction(False, detail)
-    except (URLError, TimeoutError, OSError) as exc:
-        reason = exc.reason if isinstance(exc, URLError) else exc
+            detail = ""
+        if exc.code == 503:
+            if detail and "model" in str(detail).lower():
+                return ApiPrediction(False, "El modelo de predicción no está disponible (503).")
+            if detail:
+                return ApiPrediction(False, f"Servicio no disponible (503): {detail}")
+            return ApiPrediction(False, "El modelo de predicción no está disponible (503).")
+        if detail:
+            return ApiPrediction(False, detail)
+        return ApiPrediction(False, f"La API respondió con HTTP {exc.code}.")
+    except TimeoutError:
+        return ApiPrediction(False, "Tiempo de espera agotado al obtener la predicción.")
+    except URLError as exc:
+        reason = exc.reason
+        if isinstance(reason, TimeoutError):
+            return ApiPrediction(False, "Tiempo de espera agotado al obtener la predicción.")
         return ApiPrediction(False, f"No se pudo conectar con la API ({reason}).")
+    except OSError as exc:
+        if isinstance(exc, TimeoutError) or "timed out" in str(exc).lower():
+            return ApiPrediction(False, "Tiempo de espera agotado al obtener la predicción.")
+        return ApiPrediction(False, f"No se pudo conectar con la API ({exc}).")
     except (json.JSONDecodeError, UnicodeDecodeError):
         return ApiPrediction(False, "La API devolvió una respuesta de predicción no válida.")
 
