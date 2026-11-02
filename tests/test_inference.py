@@ -93,7 +93,9 @@ def test_api_predicts_with_native_xgboost_artifact(tmp_path, monkeypatch) -> Non
     )
     model.fit(training_features, [0, 1])
     model_path = tmp_path / "delay_risk_xgb.json"
-    model.save_model(model_path)
+    # Igual que src/ml/model.py: el artefacto nativo se guarda desde el booster,
+    # no desde el wrapper de sklearn (incompatible con scikit-learn >= 1.9).
+    model.get_booster().save_model(str(model_path))
     (tmp_path / "model_metadata.json").write_text(
         json.dumps(
             {
