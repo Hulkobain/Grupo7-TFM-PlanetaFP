@@ -1,0 +1,56 @@
+seed: 42
+
+data:
+  # Fichero limpio a nivel de pedido (feature columns + target_column),
+  # generado por el pipeline de datos.
+  cleaned_path: data/cleaned/orders.parquet
+  target_column: Late_delivery_risk
+
+model:
+  objective: binary:logistic
+  eval_metric: auc
+  threshold: 0.5
+  hyperparams:
+    n_estimators: 500
+    max_depth: 6
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+    min_child_weight: 1
+    reg_lambda: 1.0
+    early_stopping_rounds: 50
+
+# Modelo alternativo para comparar contra el principal. La capacidad se
+# mantiene comparable: max_depth 6 / num_leaves 63 y el mismo presupuesto de
+# árboles y regularización. LightGBM solo aplica subsample con subsample_freq > 0.
+lightgbm:
+  objective: binary
+  eval_metric: auc
+  hyperparams:
+    n_estimators: 500
+    max_depth: 6
+    num_leaves: 63
+    learning_rate: 0.05
+    subsample: 0.8
+    subsample_freq: 1
+    colsample_bytree: 0.8
+    min_child_samples: 20
+    reg_lambda: 1.0
+    early_stopping_rounds: 50
+
+comparison:
+  primary_metric: roc_auc
+  # El retador (LightGBM) solo reemplaza al campeón (XGBoost) si mejora la
+  # métrica principal al menos en este margen; evita cambiar por ruido.
+  min_improvement: 0.005
+  report_file: model_comparison.json
+
+validation:
+  validation_size: 0.2
+  test_size: 0.2
+
+output:
+  model_dir: src/ml/artifacts
+  model_file: delay_risk_xgb.json
+  joblib_file: delay_risk_xgb.joblib
+  metadata_file: model_metadata.json
