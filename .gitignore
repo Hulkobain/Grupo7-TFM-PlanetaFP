@@ -25,5 +25,9 @@ dist/
 .vscode/
 AGENTS.md
 
-# Artefactos del modelo de ML
-src/ml/artifacts/
+# Artefactos del modelo de ML: se versionan el modelo nativo de referencia y su
+# metadata para que `docker compose up` pueda predecir sin reentrenar. El joblib
+# y el informe de comparación son artefactos locales.
+src/ml/artifacts/*
+!src/ml/artifacts/delay_risk_xgb.json
+!src/ml/artifacts/model_metadata.json

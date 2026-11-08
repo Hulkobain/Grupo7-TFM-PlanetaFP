@@ -277,14 +277,18 @@ pip install -r environment/requirements-ml.txt
 python -m src.ml.train
 ```
 
-Los artefactos se guardan en `src/ml/artifacts/` (ignorado por git):
+Los artefactos se guardan en `src/ml/artifacts/`. El repositorio versiona el
+modelo nativo de referencia y su metadata para que la app pueda predecir sin
+reentrenar; el resto son artefactos locales ignorados por git:
 
-- `delay_risk_xgb.json`: modelo en formato nativo de XGBoost, portable entre
-  versiones. Se carga con `xgb.XGBClassifier().load_model(...)`.
-- `delay_risk_xgb.joblib`: el `XGBClassifier` completo serializado con joblib,
-  listo para usar desde Python/sklearn con `joblib.load(...)`.
-- `model_metadata.json`: features, métricas, umbral, parámetros y nombres de los
-  ficheros del modelo.
+- `delay_risk_xgb.json` (versionado): modelo en formato nativo de XGBoost,
+  portable entre versiones. Se carga con
+  `xgb.XGBClassifier().load_model(...)`.
+- `model_metadata.json` (versionado): features, métricas, umbral, parámetros y
+  nombres de los ficheros del modelo.
+- `delay_risk_xgb.joblib` (local): el `XGBClassifier` completo serializado con
+  joblib, listo para usar desde Python/sklearn con `joblib.load(...)`. La API no
+  lo necesita.
 
 Cuando se integre el modelo en `/predict`, se carga desde ese directorio.
 
@@ -318,6 +322,10 @@ entrenamiento de cada alternativa.
 FastAPI carga `delay_risk_xgb.json` y `model_metadata.json` desde ese directorio.
 Si falta alguno, la API puede arrancar y `/health` seguirá comprobando el
 servicio, pero `/ingest` y `/predict` responderán `503` hasta disponer de ambos.
-Docker monta `src/ml/artifacts/` en solo lectura; puedes indicar otra carpeta
-local con `MODEL_ARTIFACT_HOST_DIR`. Entrena o copia el artefacto a esa ruta
-antes de ejecutar `docker compose up --build`.
+Docker monta `src/ml/artifacts/` en solo lectura y el artefacto versionado ya
+está en esa ruta, así que `docker compose up --build` predice sin pasos previos.
+Para reentrenar, ejecuta `python -m src.ml.train` y commitea el nuevo
+`delay_risk_xgb.json` junto con su `model_metadata.json`; `tests/test_committed_artifact.py`
+falla si el artefacto deja de coincidir con las features de `src/data/clean.py`.
+Para probar otro modelo sin tocar el repo, apunta `MODEL_ARTIFACT_HOST_DIR` a
+otra carpeta con ambos ficheros.
