@@ -8,42 +8,16 @@ from src.dashboard.api_client import (
     create_demo_shipment_payload,
     predict_shipment,
 )
+from src.dashboard.filters import (
+    DEMO_SHIPMENTS,
+    demo_map_points,
+    demo_region_risk,
+    filter_demo_shipments,
+    summarize_demo_shipments,
+)
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 RISK_LEVELS = ["Todos", "Alto", "Medio", "Bajo"]
-REGION_OPTIONS = ["Todas", "Norte", "Centro", "Sur", "Europa", "Latam"]
-
-
-def build_demo_summary() -> dict[str, int | float | str]:
-    return {
-        "shipments": 1_284,
-        "high_risk": 186,
-        "average_probability": 0.41,
-        "critical_regions": 3,
-    }
-
-
-def build_demo_region_risk() -> dict[str, float]:
-    return {"Norte": 0.62, "Centro": 0.48, "Sur": 0.71, "Europa": 0.35, "Latam": 0.69}
-
-
-def build_demo_points() -> list[dict[str, float]]:
-    return [
-        {"lat": 41.3851, "lon": 2.1734},
-        {"lat": 40.4168, "lon": -3.7038},
-        {"lat": 36.7194, "lon": -4.4200},
-        {"lat": 39.4699, "lon": -0.3763},
-        {"lat": -34.6037, "lon": -58.3816},
-    ]
-
-
-def build_demo_shipments() -> list[dict[str, str]]:
-    return [
-        {"ID": "ENV-1024", "Región": "Norte", "Riesgo": "Alto", "Probabilidad": "0.72", "Estado": "Pendiente"},
-        {"ID": "ENV-1030", "Región": "Sur", "Riesgo": "Medio", "Probabilidad": "0.54", "Estado": "Monitoreado"},
-        {"ID": "ENV-1048", "Región": "Latam", "Riesgo": "Alto", "Probabilidad": "0.68", "Estado": "Prioridad"},
-        {"ID": "ENV-1051", "Región": "Centro", "Riesgo": "Bajo", "Probabilidad": "0.22", "Estado": "OK"},
-    ]
 
 
 st.set_page_config(
@@ -54,13 +28,50 @@ st.set_page_config(
 
 with st.sidebar:
     st.header("Filtros")
-    st.date_input("Rango de fechas", value=(date(2026, 10, 1), date(2026, 10, 20)))
-    st.selectbox("Nivel de riesgo", RISK_LEVELS)
-    st.selectbox("Región", REGION_OPTIONS)
-    st.button("Actualizar datos", use_container_width=True)
+    min_date = min(shipment["order_date"] for shipment in DEMO_SHIPMENTS)
+    max_date = max(shipment["order_date"] for shipment in DEMO_SHIPMENTS)
+    selected_dates = st.date_input(
+        "Rango de fechas",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date,
+    )
+    selected_risk = st.selectbox("Nivel de riesgo", RISK_LEVELS)
+    region_options = [
+        "Todas",
+        *sorted({shipment["region"] for shipment in DEMO_SHIPMENTS}),
+    ]
+    selected_region = st.selectbox("Región", region_options)
+
+if isinstance(selected_dates, (tuple, list)):
+    start_date = selected_dates[0] if selected_dates and selected_dates[0] else min_date
+    end_date = (
+        selected_dates[1]
+        if len(selected_dates) > 1 and selected_dates[1]
+        else selected_dates[0]
+        if selected_dates and selected_dates[0]
+        else max_date
+    )
+else:
+    start_date = end_date = selected_dates
+
+filtered_shipments = filter_demo_shipments(
+    DEMO_SHIPMENTS,
+    start_date,
+    end_date,
+    selected_risk,
+    selected_region,
+)
+summary = summarize_demo_shipments(filtered_shipments)
+region_risk = demo_region_risk(filtered_shipments)
+map_points = demo_map_points(filtered_shipments)
 
 st.title("Torre de Control")
 st.caption("Smart Supply Chain Risk AI · Monitorización del riesgo logístico")
+st.info(
+    "Los filtros se aplican a los envíos de ejemplo; el dashboard aún no consulta "
+    "un histórico real de la API."
+)
 
 health = check_api_health(API_BASE_URL)
 if health.available:
@@ -68,17 +79,13 @@ if health.available:
 else:
     st.error(health.detail)
 
-summary = build_demo_summary()
-region_risk = build_demo_region_risk()
-recent_shipments = build_demo_shipments()
-
 st.subheader("Resumen ejecutivo")
 kpis = st.columns(4)
 for column, label, value, help_text in zip(
     kpis,
     (
-        "Envíos monitorizados",
-        "Riesgo alto",
+        "Envíos de ejemplo",
+        "En riesgo alto",
         "Probabilidad media",
         "Regiones críticas",
     ),
@@ -114,13 +121,19 @@ map_column, risk_column = st.columns(2)
 
 with map_column:
     st.markdown("#### Mapa de riesgo")
-    st.map(build_demo_points())
-    st.caption("Puntos de ejemplo para el mapa. Se conectará con geolocalización real cuando el backend lo publique.")
+    if map_points:
+        st.map(map_points)
+    else:
+        st.info("No hay envíos de ejemplo para los filtros seleccionados.")
+    st.caption("Ubicaciones orientativas de ejemplo, no geolocalización real.")
 
 with risk_column:
     st.markdown("#### Riesgo por región")
-    st.bar_chart(region_risk)
-    st.caption("Agregación regional de ejemplo. El contrato real llega con los endpoints del backend.")
+    if region_risk:
+        st.bar_chart(region_risk)
+    else:
+        st.info("No hay datos para mostrar con los filtros seleccionados.")
+    st.caption("Probabilidad media de los envíos de ejemplo filtrados por región.")
 
 st.subheader("Prueba rápida del contrato de predicción")
 shipment_payload = create_demo_shipment_payload()
@@ -216,8 +229,22 @@ with st.form("demo_prediction_form"):
             st.info(f"Nivel: {risk_label} · Umbral: {data['threshold']:.2f} · {data['interpretation']}")
 
 st.subheader("Envíos recientes")
-st.table(recent_shipments)
+if filtered_shipments:
+    st.table(
+        [
+            {
+                "ID": shipment["shipment_id"],
+                "Fecha": shipment["order_date"].isoformat(),
+                "Región": shipment["region"],
+                "Riesgo": shipment["risk"],
+                "Probabilidad": f"{shipment['probability']:.2f}",
+                "Estado": shipment["status"],
+            }
+            for shipment in filtered_shipments
+        ]
+    )
+else:
+    st.info("No hay envíos de ejemplo que coincidan con los filtros seleccionados.")
 st.caption(
-    "Los datos actuales son de ejemplo para preparar el dashboard. Cuando el backend publique el endpoint real, "
-    "se sustituirá por consultas definitivas."
+    "Los controles de fecha, riesgo y región filtran esta tabla, los indicadores y los gráficos."
 )
