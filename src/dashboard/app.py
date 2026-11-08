@@ -13,6 +13,7 @@ from src.dashboard.filters import (
     demo_map_points,
     demo_region_risk,
     filter_demo_shipments,
+    reset_filter_state,
     summarize_demo_shipments,
 )
 
@@ -35,13 +36,28 @@ with st.sidebar:
         value=(min_date, max_date),
         min_value=min_date,
         max_value=max_date,
+        key="dashboard_filter_dates",
     )
-    selected_risk = st.selectbox("Nivel de riesgo", RISK_LEVELS)
+    selected_risk = st.selectbox(
+        "Nivel de riesgo",
+        RISK_LEVELS,
+        key="dashboard_filter_risk",
+    )
     region_options = [
         "Todas",
         *sorted({shipment["region"] for shipment in DEMO_SHIPMENTS}),
     ]
-    selected_region = st.selectbox("Región", region_options)
+    selected_region = st.selectbox(
+        "Región",
+        region_options,
+        key="dashboard_filter_region",
+    )
+    st.button(
+        "Limpiar filtros",
+        use_container_width=True,
+        on_click=reset_filter_state,
+        args=(st.session_state, min_date, max_date),
+    )
 
 if isinstance(selected_dates, (tuple, list)):
     start_date = selected_dates[0] if selected_dates and selected_dates[0] else min_date

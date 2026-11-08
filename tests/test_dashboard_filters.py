@@ -4,6 +4,7 @@ from src.dashboard.filters import (
     DEMO_SHIPMENTS,
     demo_region_risk,
     filter_demo_shipments,
+    reset_filter_state,
     summarize_demo_shipments,
 )
 
@@ -55,3 +56,19 @@ def test_no_matches_return_empty_summary() -> None:
         "critical_regions": 0,
     }
     assert demo_region_risk(shipments) == {}
+
+
+def test_reset_filter_state_restores_default_values() -> None:
+    state = {
+        "dashboard_filter_dates": (date(2026, 10, 5), date(2026, 10, 12)),
+        "dashboard_filter_risk": "Alto",
+        "dashboard_filter_region": "Latam",
+    }
+
+    reset_filter_state(state, date(2026, 10, 1), date(2026, 10, 20))
+
+    assert state == {
+        "dashboard_filter_dates": (date(2026, 10, 1), date(2026, 10, 20)),
+        "dashboard_filter_risk": "Todos",
+        "dashboard_filter_region": "Todas",
+    }

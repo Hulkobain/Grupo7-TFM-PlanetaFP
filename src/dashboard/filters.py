@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import MutableMapping, Sequence
 from datetime import date
 from typing import TypedDict
 
@@ -11,6 +11,11 @@ class DemoShipment(TypedDict):
     risk: str
     probability: float
     status: str
+
+
+DATE_FILTER_KEY = "dashboard_filter_dates"
+RISK_FILTER_KEY = "dashboard_filter_risk"
+REGION_FILTER_KEY = "dashboard_filter_region"
 
 
 DEMO_SHIPMENTS: tuple[DemoShipment, ...] = (
@@ -26,6 +31,16 @@ DEMO_REGION_COORDINATES = {
     "Sur": (36.7194, -4.4200),
     "Latam": (-34.6037, -58.3816),
 }
+
+
+def reset_filter_state(
+    state: MutableMapping[str, object],
+    start_date: date,
+    end_date: date,
+) -> None:
+    state[DATE_FILTER_KEY] = (start_date, end_date)
+    state[RISK_FILTER_KEY] = "Todos"
+    state[REGION_FILTER_KEY] = "Todas"
 
 
 def filter_demo_shipments(
