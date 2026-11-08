@@ -5,6 +5,8 @@ services:
       target: api
     environment:
       MODEL_ARTIFACT_DIR: /app/src/ml/artifacts
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_MAX_ATTEMPTS: ${WEBHOOK_MAX_ATTEMPTS:-3}
     volumes:
       - ${MODEL_ARTIFACT_HOST_DIR:-./src/ml/artifacts}:/app/src/ml/artifacts:ro
     ports:
